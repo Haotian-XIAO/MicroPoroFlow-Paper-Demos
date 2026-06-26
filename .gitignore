@@ -20,3 +20,5 @@ data/processed/
 .ipynb_checkpoints/
 
 .env
+_build/
+.jupyter_cache/

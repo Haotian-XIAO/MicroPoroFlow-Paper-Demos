@@ -1,16 +1,23 @@
-# Welcome to your Jupyter Book
 
-This is a small sample book to give you a feel for how book content is
-structured.
+MicroPoroFlow Paper Demos
 
-:::{note}
-Here is a note!
-:::
+This Jupyter Book contains the numerical demonstrations used to generate Figures 3–10 of the MicroPoroFlow paper.
 
-And here is a code block:
+The notebooks reproduce the permeability-homogenization results for porous representative volume elements subjected to liquid-pressure gradients, macroscopic deformation, and gas-pressure loading.
 
-```
-e = mc^2
-```
+Contents
+Figure 3: linear permeability homogenization
+Figure 4: fluid-loading response
+Figures 5–7: permeability under uniaxial stretch and shear
+Figure 8: gas-pressure loading after uniaxial stretch
+Figure 9: gas-pressure effects under different deformation modes
+Figure 10: comparison of the main loading cases
 
-Check out the content pages bundled with this sample book to see more.
+The numerical outputs stored in the notebooks are used when this book is built. Building the documentation therefore does not rerun the full finite-element simulations.
+
+Authors
+
+Haotian XIAO
+Martin GENET
+
+École Polytechnique, Palaiseau, France

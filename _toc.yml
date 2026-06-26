@@ -1,8 +1,10 @@
-# Table of contents
-# Learn more at https://jupyterbook.org/customize/toc.html
-
 format: jb-book
 root: intro
+
 chapters:
-- file: markdown
-- file: notebooks
+  - file: demos/Figure3-Linear
+  - file: demos/Figure4-Fluid-loading
+  - file: demos/Figure5-7-Stress+Shear-effects
+  - file: demos/Figure8-Gas-pressure-after-stretch
+  - file: demos/Figure9-Gas-loading-modes
+  - file: demos/Figure10-Summary
