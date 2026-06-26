@@ -3,8 +3,6 @@ MicroPoroFlow Paper Demos
 
 This Jupyter Book contains the numerical demonstrations used to generate Figures 3–10 of the MicroPoroFlow paper.
 
-The notebooks reproduce the permeability-homogenization results for porous representative volume elements subjected to liquid-pressure gradients, macroscopic deformation, and gas-pressure loading.
-
 Contents
 Figure 3: linear permeability homogenization
 Figure 4: fluid-loading response
