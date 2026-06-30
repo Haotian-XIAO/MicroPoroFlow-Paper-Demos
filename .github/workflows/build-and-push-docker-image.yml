@@ -26,6 +26,7 @@ jobs:
           rm -rf .binder binder
           rm -f Dockerfile requirements.txt
           cp .repo2docker/environment.yml ./environment.yml
+          cp .repo2docker/apt.txt ./apt.txt
           cp .repo2docker/postBuild ./postBuild
           chmod +x postBuild
 
