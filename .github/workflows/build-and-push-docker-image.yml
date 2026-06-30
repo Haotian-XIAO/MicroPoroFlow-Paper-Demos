@@ -1,0 +1,38 @@
+name: Build and push repo2docker image
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - ".repo2docker/**"
+      - ".github/workflows/build-and-push-docker-image.yml"
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Prepare repo2docker configuration
+        run: |
+          rm -rf .binder binder
+          rm -f Dockerfile requirements.txt
+          cp .repo2docker/environment.yml ./environment.yml
+          cp .repo2docker/postBuild ./postBuild
+          chmod +x postBuild
+
+      - name: Build and push repo2docker image
+        uses: jupyterhub/repo2docker-action@master
+        with:
+          DOCKER_USERNAME: ${{ github.actor }}
+          DOCKER_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+          DOCKER_REGISTRY: ghcr.io
+          IMAGE_NAME: haotian-xiao/microporoflow-paper-demos

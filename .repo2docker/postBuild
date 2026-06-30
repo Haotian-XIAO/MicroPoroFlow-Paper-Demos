@@ -1,0 +1,8 @@
+#!/bin/bash
+
+set -e
+
+python -m pip install --no-deps \
+  "git+https://github.com/Haotian-XIAO/dolfin_mech_HX.git@c889cd67e3dd88ee723978e780f6a79e0b366d99"
+
+python -c "import dolfin, dolfin_mech, gmsh; print('DOLFIN:', dolfin.__version__); print('dolfin_mech:', dolfin_mech.__file__); print('gmsh:', gmsh.__file__)"
