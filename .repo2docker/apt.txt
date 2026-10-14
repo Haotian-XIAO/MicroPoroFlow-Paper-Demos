@@ -1,2 +1,14 @@
+# System libraries needed by the gmsh 4.13.1 PyPI wheel (installed in postBuild): shared libraries required by
+# libgmsh.so (libGL, libGLU, libgomp, libfontconfig, libX11, libXcursor, libXfixes, libXft, libXinerama, libXrender).
+# No off-screen rendering is used by the demos (pyvista only reads and processes data), so xvfb/OSMesa are not needed.
+
+libfontconfig1
 libgl1
 libglu1-mesa
+libgomp1
+libx11-6
+libxcursor1
+libxfixes3
+libxft2
+libxinerama1
+libxrender1

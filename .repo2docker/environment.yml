@@ -1,29 +1,43 @@
-name: microporoflow
+# Environment of the demos. Versions are those of the environment used for the paper results (conda environment
+# "dolfin-clean", macOS arm64); this file solves on conda-forge for linux-64 (Binder, Docker) and osx-arm64.
+# Packages installed with pip (scipy, gmsh, myPythonLibrary, myVTKPythonLibrary, vtkpython-cbl, dolfin_mech) are in
+# postBuild; the system libraries needed by the gmsh wheel are in apt.txt.
+
+name: notebook
 
 channels:
   - conda-forge
 
 dependencies:
-  - python=3.10
-  - fenics=2019.1.0
-  - numpy=1.24
-  - pandas=1.3
-  - matplotlib=3.5
-  - matplotlib-inline=0.1.7
-  - meshio=5.3
+# python
   - mpi4py=3.1.3
-  - vtk=9.2
-  - gmsh
-  - python-gmsh
-  - jupyterlab
-  - ipykernel
-  - git
-  - pip
+  - numpy=1.24.4
+  - pandas=1.3.5
+  - python=3.10.16
+  - sympy=1.13.3
+  - tqdm=4.67.1
+  - pooch=1.9.0
 
-  - pip:
-      - scipy==1.15.3
-      - pyvista==0.48.0
-      - myPythonLibrary==2025.4.17
-      - myVTKPythonLibrary==2025.4.18
-      - vtkpython-cbl==2025.4.17
-      - jupyter-book<2
+# jupyter
+  - ipykernel=6.29.5
+  - ipywidgets=8.0.1
+  - jupyter=1.0.0
+  - jupyterlab=3.5.0
+  - matplotlib-inline=0.1.7
+  - notebook=6.4.12
+
+# computing stuff
+  - fenics=2019.1.0
+  - h5py=3.13.0
+  - meshio=5.3.5
+  - openmpi=4.1.6
+  - petsc=3.21.2
+  - petsc4py=3.21.2
+  - vtk=9.2.6
+
+# plotting stuff
+  - matplotlib-base=3.10.9
+  - pyvista=0.48.0
+
+  - git=2.44
+  - pip=25.1.1

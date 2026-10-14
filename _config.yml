@@ -1,13 +1,44 @@
-title: MicroPoroFlow Paper Demos
-author: Haotian XIAO and Martin GENET
+############################################################## Book settings ###
+
+# Title: authors, year and title of the paper as in the current manuscript; to be updated after publication
+# (final title, journal, DOI).
+title: "Welcome to [Xiao & Genet (2026). Effective permeability of double-scale porous media under finite deformation: a three-phase micro-poro-mechanics framework. In preparation.]'s demos!"
+author: Haotian Xiao, Martin Genet
+logo: logo.png
+copyright: "2026"
+only_build_toc_files: true
+
+######################################################### Execution settings ###
 
 execute:
-  execute_notebooks: "off"
+  execute_notebooks: off
+
+############################################################# Parse settings ###
+
+parse:
+  myst_enable_extensions:
+    - amsmath
+    - dollarmath
+
+############################################################## HTML settings ###
+
+html:
+  use_repository_button: true
+  use_issues_button: false
+
+############################################################# LaTeX settings ###
+
+latex:
+  latex_engine: pdflatex
+  use_jupyterbook_latex: true
+
+############################################################# Launch settings ###
 
 repository:
   url: https://github.com/Haotian-XIAO/MicroPoroFlow-Paper-Demos
+  path_to_book: .
   branch: main
 
-html:
-  use_issues_button: true
-  use_repository_button: true
+launch_buttons:
+  notebook_interface: classic
+  binderhub_url: https://mybinder.org

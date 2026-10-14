@@ -2,7 +2,32 @@
 
 set -e
 
+# Packages installed with pip, at the versions used for the paper results, without their dependencies (these come
+# from environment.yml):
+# - scipy 1.15.3: not available on conda-forge (closest: 1.15.2);
+# - gmsh 4.13.1: the conda-forge build cannot be installed together with vtk 9.2.6 and fenics 2019.1.0; the PyPI
+#   wheel needs the system libraries listed in apt.txt;
+# - myPythonLibrary, myVTKPythonLibrary, vtkpython-cbl: only on PyPI.
 python -m pip install --no-deps \
-  "git+https://github.com/Haotian-XIAO/dolfin_mech_HX.git@c889cd67e3dd88ee723978e780f6a79e0b366d99"
+  "scipy==1.15.3" \
+  "gmsh==4.13.1" \
+  "myPythonLibrary==2025.4.17" \
+  "myVTKPythonLibrary==2025.4.18" \
+  "vtkpython-cbl==2025.4.17"
 
-python -c "import dolfin, dolfin_mech, gmsh; print('DOLFIN:', dolfin.__version__); print('dolfin_mech:', dolfin_mech.__file__); print('gmsh:', gmsh.__file__)"
+# dolfin_mech: fork https://github.com/Haotian-XIAO/dolfin_mech_HX, commit aace2bf (branch "clean"), i.e. dolfin_mech
+# with the exact simple-shear fix (macroscopic symmetry penalty skipped when all off-diagonal U_bar components are
+# prescribed), as used for the paper results.
+python -m pip install --no-deps \
+  "git+https://github.com/Haotian-XIAO/dolfin_mech_HX.git@aace2bfc1b5f2841589f58749b486a4694c10c01"
+
+python -c "import dolfin, dolfin_mech, gmsh, scipy; print('DOLFIN', dolfin.__version__, '| gmsh', gmsh.__version__, '| scipy', scipy.__version__)"
+
+cd
+
+echo "alias ll=\"ls -lh\"" >> ~/.bash_aliases
+echo "alias la=\"ls -lah\"" >> ~/.bash_aliases
+
+rm ~/apt.txt
+rm ~/environment.yml
+rm ~/postBuild
