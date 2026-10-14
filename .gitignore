@@ -22,3 +22,11 @@ data/processed/
 .env
 _build/
 .jupyter_cache/
+
+# Notebook outputs: each notebook writes its results and figures to demos/<notebook name>/
+demos/Fig3/
+demos/Fig4/
+demos/Fig5-6-7/
+demos/Fig8/
+demos/Fig9/
+demos/Fig10/

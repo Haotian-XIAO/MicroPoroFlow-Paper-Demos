@@ -2,9 +2,9 @@ format: jb-book
 root: intro
 
 chapters:
-  - file: demos/Figure3-Linear
-  - file: demos/Figure4-Fluid-loading
-  - file: demos/Figure5-7-Stress+Shear-effects
-  - file: demos/Figure8-Gas-pressure-after-stretch
-  - file: demos/Figure9-Gas-loading-modes
-  - file: demos/Figure10-Summary
+  - file: demos/Fig3
+  - file: demos/Fig4
+  - file: demos/Fig5-6-7
+  - file: demos/Fig8
+  - file: demos/Fig9
+  - file: demos/Fig10

@@ -13,7 +13,7 @@ import pandas as pd
 import pyvista as pv
 
 from matplotlib.lines import Line2D
-from matplotlib.patches import FancyArrowPatch
+from matplotlib.patches import Circle, FancyArrowPatch, Rectangle, RegularPolygon
 from matplotlib.ticker import FormatStrFormatter, FuncFormatter, MaxNLocator
 plt.rcParams.update({
     "font.size": 15,
@@ -36,6 +36,15 @@ def load_qois(qois_filename):
 def get(qois_vals, qois_names, key):
     return qois_vals[:, qois_names.index(key)]
 
+# Reference state for all K-based indicators (C_K, K/K_ref, prediction K0): the
+# frame saved at the end of the first load step (t = 0.01), where the solid is
+# unloaded and the liquid pressure gradient has just reached its test value.
+T_REF = 0.01
+
+def reference_frame_index(qois_vals, qois_names, t_ref=T_REF):
+    """Index of the saved frame whose time is closest to t_ref."""
+    return int(np.argmin(np.abs(get(qois_vals, qois_names, "t") - t_ref)))
+
 def plot_linear_homogenization_hollowbox(
     res_folder="results_linear_homogenization",
     shape_list=("round", "hex"),
@@ -45,6 +54,8 @@ def plot_linear_homogenization_hollowbox(
     save_name="plots/linear_homogenization_K_vs_phi.png",
     show_plot=False,
     eps=1e-12,
+    geometry_r0_values=(0.072, 0.315, 0.41),
+    add_hs_bound=True,
 ):
 
     os.makedirs(os.path.dirname(save_name) or ".", exist_ok=True)
@@ -57,10 +68,10 @@ def plot_linear_homogenization_hollowbox(
 
     def shape_label(shape):
         if shape == "round":
-            return "Microscopic model - circular inclusions"
+            return "Circular gas pore"
         if shape == "hex":
-            return "Microscopic model - hexagonal inclusions"
-        return f"Microscopic model - {shape} inclusions"
+            return "Hexagonal gas pore"
+        return f"{shape.capitalize()} gas pore"
 
     def build_basename(shape, r0, probe):
         return f"{res_folder}/{res_basename_prefix}-{shape}-r0={fmt_file(r0)}-{probe}"
@@ -83,6 +94,82 @@ def plot_linear_homogenization_hollowbox(
                     return float(metadata[key])
 
         return None
+
+    def read_geometry_metadata(shape, r0):
+        filename = build_metadata_filename(shape, r0, "gx")
+        with open(filename, "r") as f:
+            return json.load(f)
+
+    def draw_reference_rve(ax, metadata, phi, matrix_color):
+        """Draw the exact analytic RVE construction stored with a result.
+
+        The colored rectangle is the solid--liquid matrix. The central pore
+        and four clipped corner images reproduce the periodic construction
+        used by ``run_HollowBox_Mesh``; no finite-element mesh is rendered.
+        """
+        mesh_params = metadata["mesh_params"]
+        xmin, ymin = mesh_params["xmin"], mesh_params["ymin"]
+        xmax, ymax = mesh_params["xmax"], mesh_params["ymax"]
+        r0 = mesh_params["r0"]
+        shape = mesh_params["hole_shape"]
+
+        ax.add_patch(
+            Rectangle(
+                (xmin, ymin),
+                xmax - xmin,
+                ymax - ymin,
+                facecolor=matrix_color,
+                edgecolor="none",
+                linewidth=0.0,
+                antialiased=False,
+            )
+        )
+
+        centers = [
+            (xmin, ymin),
+            (xmax, ymin),
+            (xmax, ymax),
+            (xmin, ymax),
+            (0.5 * (xmin + xmax), 0.5 * (ymin + ymax)),
+        ]
+        for center in centers:
+            if shape == "round":
+                pore = Circle(
+                    center,
+                    radius=r0,
+                    facecolor="white",
+                    edgecolor=matrix_color,
+                    linewidth=0.55,
+                )
+            elif shape == "hex":
+                pore = RegularPolygon(
+                    center,
+                    numVertices=6,
+                    radius=r0,
+                    # matplotlib's unrotated polygon has a vertex at 90 deg; the mesh
+                    # (run_HollowBox_Mesh) puts the first vertex at angle0 (default 90 deg).
+                    orientation=mesh_params.get("angle0", np.pi / 2.0) - np.pi / 2.0,
+                    facecolor="white",
+                    edgecolor=matrix_color,
+                    linewidth=0.55,
+                )
+            else:
+                raise ValueError(f"Unsupported RVE pore shape: {shape}")
+            ax.add_patch(pore)
+
+        ax.set_xlim(xmin, xmax)
+        ax.set_ylim(ymin, ymax)
+        ax.set_aspect("equal")
+        ax.set_axis_off()
+        ax.text(
+            0.5,
+            -0.12,
+            rf"$\tilde{{\Phi}}_{{g0}}={phi:.2f}$",
+            transform=ax.transAxes,
+            ha="center",
+            va="top",
+            fontsize=8.5,
+        )
 
     def read_probe(filename):
         qois_vals, names = load_qois(filename)
@@ -201,13 +288,54 @@ def plot_linear_homogenization_hollowbox(
 
     K_dilute = Km * (1.0 - 2.0 * phi_grid)
     K_diff = Km * (1.0 - phi_grid) ** 2
+    # Hashin-Shtrikman upper bound for a 2D isotropic composite with insulating pores:
+    # K_eff / k_m <= (1 - phi) / (1 + phi); no admissible result can exceed it.
+    K_hs = Km * (1.0 - phi_grid) / (1.0 + phi_grid)
     mask_dilute = K_dilute > 0.0
 
-    fig, ax = plt.subplots(figsize=(7.6, 5.2))
+    if isinstance(geometry_r0_values, dict):
+        geometry_r0_values_by_shape = {
+            shape: tuple(geometry_r0_values[shape])
+            for shape in ("round", "hex")
+        }
+    else:
+        geometry_r0_values_by_shape = {
+            shape: tuple(geometry_r0_values)
+            for shape in ("round", "hex")
+        }
+
+    geometry_data = {}
+    for shape in ("round", "hex"):
+        for r0 in geometry_r0_values_by_shape[shape]:
+            selection = df[
+                (df["shape"] == shape) & np.isclose(df["r0"], r0)
+            ]
+            if len(selection) != 1:
+                raise RuntimeError(
+                    f"Expected one Figure 3 result for shape={shape}, r0={r0}."
+                )
+            geometry_data[(shape, r0)] = (
+                read_geometry_metadata(shape, r0),
+                float(selection.iloc[0]["phi"]),
+            )
+
+    fig = plt.figure(figsize=(7.6, 9.4))
+    outer_grid = fig.add_gridspec(
+        nrows=2,
+        ncols=1,
+        height_ratios=(3.35, 2.65),
+        hspace=0.32,
+    )
+    ax = fig.add_subplot(outer_grid[0])
 
     markers = {
         "round": "o",
         "hex": "s",
+    }
+
+    shape_colors = {
+        "round": "#1f77b4",
+        "hex": "#ff7f0e",
     }
 
     linestyles = {
@@ -226,6 +354,7 @@ def plot_linear_homogenization_hollowbox(
             sub["Keq"] / Km,
             marker=markers.get(shape, "o"),
             linestyle=linestyles.get(shape, "-"),
+            color=shape_colors.get(shape),
             linewidth=2.0,
             markerfacecolor="white",
             label=shape_label(shape),
@@ -249,13 +378,62 @@ def plot_linear_homogenization_hollowbox(
         label="Differential scheme",
     )
 
+    if add_hs_bound:
+        ax.plot(
+            phi_grid,
+            K_hs / Km,
+            color="black",
+            linestyle="-",
+            linewidth=1.2,
+            label="Hashin\u2013Shtrikman upper bound",
+        )
+
     ax.set_xlabel(r"$\tilde{\Phi}_{g0}$", fontsize=14)
-    ax.set_ylabel(r"$K_i/K_m$", fontsize=14)
+    ax.set_ylabel(r"$\tilde K_i/k_m$", fontsize=14)
     ax.tick_params(axis="both", labelsize=12)
     ax.grid(False)
     ax.legend(fontsize=9.5, frameon=True)
+    ax.text(-0.10, 1.03, "(a)", transform=ax.transAxes, fontsize=13, fontweight="bold")
 
-    plt.tight_layout()
+    geometry_grid = outer_grid[1].subgridspec(
+        nrows=2,
+        ncols=4,
+        width_ratios=(0.72, 1.0, 1.0, 1.0),
+        hspace=0.42,
+        wspace=0.12,
+    )
+    lower_bbox = outer_grid[1].get_position(fig)
+    fig.text(
+        lower_bbox.x0,
+        lower_bbox.y1 + 0.012,
+        "(b)",
+        fontsize=13,
+        fontweight="bold",
+    )
+
+    row_labels = ("Circular pore", "Hexagonal pore")
+    for row, (shape, row_label) in enumerate(zip(("round", "hex"), row_labels)):
+        label_ax = fig.add_subplot(geometry_grid[row, 0])
+        label_ax.set_axis_off()
+        label_ax.text(
+            0.92,
+            0.5,
+            row_label,
+            ha="right",
+            va="center",
+            fontsize=10,
+        )
+        for column, r0 in enumerate(geometry_r0_values_by_shape[shape], start=1):
+            geometry_ax = fig.add_subplot(geometry_grid[row, column])
+            metadata, phi = geometry_data[(shape, r0)]
+            draw_reference_rve(
+                geometry_ax,
+                metadata,
+                phi,
+                matrix_color=shape_colors[shape],
+            )
+
+    fig.subplots_adjust(left=0.12, right=0.98, bottom=0.06, top=0.97)
     plt.savefig(save_name, bbox_inches="tight", dpi=300)
 
     if show_plot:
@@ -273,7 +451,8 @@ def plot_principal_K_vs_U(
     pf_list=(0.0,),
     x_component="xx",
     phi=None,
-    slice_start=5,
+    slice_start=None,
+    t_ref=T_REF,
     eps=1e-12,
     add_prediction=True,
     save_name="plots/principal_K_vs_U.png",
@@ -299,10 +478,10 @@ def plot_principal_K_vs_U(
     }
 
     x_labels = {
-        "xx": r"$E_x$",
-        "yy": r"$E_y$",
-        "xy": r"$E_{xy}$",
-        "yx": r"$E_{yx}$",
+        "xx": r"$\Delta\lambda_x$",
+        "yy": r"$\Delta\lambda_y$",
+        "xy": r"$\gamma$",
+        "yx": r"$\tilde F_{yx}$",
     }
 
     if x_component not in x_components:
@@ -376,38 +555,43 @@ def plot_principal_K_vs_U(
 
     def read_probe(filename):
         qois_vals, names = load_qois(filename)
+        start = (
+            reference_frame_index(qois_vals, names, t_ref)
+            if slice_start is None
+            else slice_start
+        )
 
         data = {
             "Uxx": np.asarray(
-                get(qois_vals, names, "U_bar_XX")[slice_start:],
+                get(qois_vals, names, "U_bar_XX")[start:],
                 dtype=float,
             ),
             "Uyy": np.asarray(
-                get(qois_vals, names, "U_bar_YY")[slice_start:],
+                get(qois_vals, names, "U_bar_YY")[start:],
                 dtype=float,
             ),
             "Uxy": np.asarray(
-                get(qois_vals, names, "U_bar_XY")[slice_start:],
+                get(qois_vals, names, "U_bar_XY")[start:],
                 dtype=float,
             ),
             "Uyx": np.asarray(
-                get(qois_vals, names, "U_bar_YX")[slice_start:],
+                get(qois_vals, names, "U_bar_YX")[start:],
                 dtype=float,
             ),
             "Qx": np.asarray(
-                get(qois_vals, names, "Q_l_avg_x")[slice_start:],
+                get(qois_vals, names, "Q_l_avg_x")[start:],
                 dtype=float,
             ),
             "Qy": np.asarray(
-                get(qois_vals, names, "Q_l_avg_y")[slice_start:],
+                get(qois_vals, names, "Q_l_avg_y")[start:],
                 dtype=float,
             ),
             "gx": np.asarray(
-                get(qois_vals, names, "grad_p_bar_avg_x")[slice_start:],
+                get(qois_vals, names, "grad_p_bar_avg_x")[start:],
                 dtype=float,
             ),
             "gy": np.asarray(
-                get(qois_vals, names, "grad_p_bar_avg_y")[slice_start:],
+                get(qois_vals, names, "grad_p_bar_avg_y")[start:],
                 dtype=float,
             ),
         }
@@ -427,9 +611,14 @@ def plot_principal_K_vs_U(
         if len(theta_raw) == 0:
             return theta_cont
 
+        # Frame 0 is the isotropic unloaded reference: its principal axis is
+        # undefined (noise-driven), so the unwrapping starts at frame 1.
         theta_cont[0] = theta_raw[0]
 
-        for i in range(1, len(theta_raw)):
+        if len(theta_raw) > 1:
+            theta_cont[1] = theta_raw[1]
+
+        for i in range(2, len(theta_raw)):
             delta = (
                 theta_raw[i]
                 - theta_cont[i - 1]
@@ -447,9 +636,14 @@ def plot_principal_K_vs_U(
         if len(theta_raw) == 0:
             return theta_cont
 
+        # Frame 0 is the isotropic unloaded reference: its principal axis is
+        # undefined (noise-driven), so the unwrapping starts at frame 1.
         theta_cont[0] = theta_raw[0]
 
-        for i in range(1, len(theta_raw)):
+        if len(theta_raw) > 1:
+            theta_cont[1] = theta_raw[1]
+
+        for i in range(2, len(theta_raw)):
             delta = (
                 theta_raw[i]
                 - theta_cont[i - 1]
@@ -1151,7 +1345,7 @@ def plot_principal_K_vs_U(
             marker=markers["K1"],
             markerfacecolor="white",
             markeredgecolor=colors["K1"],
-            label=r"$K_1/K_{1,0}$",
+            label=r"Microscopic model, $\tilde K_1/\tilde K_{1,0}$",
         ),
     ]
 
@@ -1163,7 +1357,7 @@ def plot_principal_K_vs_U(
                 color=colors["K1"],
                 linestyle="-",
                 linewidth=2.0,
-                label=r"$K_1^{kin}/K_{1,0}$",
+                label=r"Macroscopic model, $\bar K_1/\bar K_{1,0}$",
             )
         )
 
@@ -1177,7 +1371,7 @@ def plot_principal_K_vs_U(
             marker=markers["K2"],
             markerfacecolor="white",
             markeredgecolor=colors["K2"],
-            label=r"$K_2/K_{2,0}$",
+            label=r"Microscopic model, $\tilde K_2/\tilde K_{2,0}$",
         )
     )
 
@@ -1189,7 +1383,7 @@ def plot_principal_K_vs_U(
                 color=colors["K2"],
                 linestyle="-",
                 linewidth=2.0,
-                label=r"$K_2^{kin}/K_{2,0}$",
+                label=r"Macroscopic model, $\bar K_2/\bar K_{2,0}$",
             )
         )
 
@@ -1203,7 +1397,7 @@ def plot_principal_K_vs_U(
             marker=markers["theta"],
             markerfacecolor="white",
             markeredgecolor=colors["theta"],
-            label=r"$\theta$",
+            label=r"Microscopic model, $\tilde\theta$",
         )
     )
 
@@ -1215,7 +1409,7 @@ def plot_principal_K_vs_U(
                 color=colors["theta"],
                 linestyle="-",
                 linewidth=2.0,
-                label=r"$\theta^{kin}$",
+                label=r"Macroscopic model, $\bar\theta$",
             )
         )
 
@@ -1226,7 +1420,7 @@ def plot_principal_K_vs_U(
             color=colors["theta"],
             linestyle="--",
             linewidth=2.0,
-            label=r"$\theta$ undefined at reference",
+            label=r"$\tilde\theta$ undefined at reference",
         )
     )
 
@@ -1380,7 +1574,8 @@ def plot_gas_pressure_loading_summary(
     pf_list=(0.0, 0.2),
     probe_list=("gx", "gy"),
     phi=None,
-    slice_start=5,
+    slice_start=None,
+    t_ref=T_REF,
     eps=1e-12,
     save_name="plots/Figure8_pg_compare.png",
     show_plot=False,
@@ -1411,14 +1606,14 @@ def plot_gas_pressure_loading_summary(
     }
 
     mode_to_xlabel = {
-        "stretch-x": r"$E_x$",
-        "volumic": r"$E_x=E_y$",
-        "shear": r"$E_{xy}$",
+        "stretch-x": r"$\Delta\lambda_x$",
+        "volumic": r"$\Delta\lambda_x=\Delta\lambda_y$",
+        "shear": r"$\gamma$",
     }
 
     mode_to_label = {
         "stretch-x": r"Uniaxial loading",
-        "volumic": r"Pure volumetric loading",
+        "volumic": r"Equibiaxial stretching",
         "shear": r"Simple shear loading",
     }
 
@@ -1481,16 +1676,21 @@ def plot_gas_pressure_loading_summary(
 
     def read_probe(filename):
         qois_vals, names = load_qois(filename)
+        start = (
+            reference_frame_index(qois_vals, names, t_ref)
+            if slice_start is None
+            else slice_start
+        )
 
         data = {
-            "Uxx": np.asarray(get(qois_vals, names, "U_bar_XX")[slice_start:], dtype=float),
-            "Uyy": np.asarray(get(qois_vals, names, "U_bar_YY")[slice_start:], dtype=float),
-            "Uxy": np.asarray(get(qois_vals, names, "U_bar_XY")[slice_start:], dtype=float),
-            "Uyx": np.asarray(get(qois_vals, names, "U_bar_YX")[slice_start:], dtype=float),
-            "Qx": np.asarray(get(qois_vals, names, "Q_l_avg_x")[slice_start:], dtype=float),
-            "Qy": np.asarray(get(qois_vals, names, "Q_l_avg_y")[slice_start:], dtype=float),
-            "gx": np.asarray(get(qois_vals, names, "grad_p_bar_avg_x")[slice_start:], dtype=float),
-            "gy": np.asarray(get(qois_vals, names, "grad_p_bar_avg_y")[slice_start:], dtype=float),
+            "Uxx": np.asarray(get(qois_vals, names, "U_bar_XX")[start:], dtype=float),
+            "Uyy": np.asarray(get(qois_vals, names, "U_bar_YY")[start:], dtype=float),
+            "Uxy": np.asarray(get(qois_vals, names, "U_bar_XY")[start:], dtype=float),
+            "Uyx": np.asarray(get(qois_vals, names, "U_bar_YX")[start:], dtype=float),
+            "Qx": np.asarray(get(qois_vals, names, "Q_l_avg_x")[start:], dtype=float),
+            "Qy": np.asarray(get(qois_vals, names, "Q_l_avg_y")[start:], dtype=float),
+            "gx": np.asarray(get(qois_vals, names, "grad_p_bar_avg_x")[start:], dtype=float),
+            "gy": np.asarray(get(qois_vals, names, "grad_p_bar_avg_y")[start:], dtype=float),
         }
 
         npts = len(data["Uxx"])
@@ -1551,9 +1751,14 @@ def plot_gas_pressure_loading_summary(
         if len(theta_raw) == 0:
             return theta_cont
 
+        # Frame 0 is the isotropic unloaded reference: its principal axis is
+        # undefined (noise-driven), so the unwrapping starts at frame 1.
         theta_cont[0] = theta_raw[0]
 
-        for i in range(1, len(theta_raw)):
+        if len(theta_raw) > 1:
+            theta_cont[1] = theta_raw[1]
+
+        for i in range(2, len(theta_raw)):
             delta = (theta_raw[i] - theta_cont[i - 1] + 90.0) % 180.0 - 90.0
             theta_cont[i] = theta_cont[i - 1] + delta
 
@@ -1654,34 +1859,56 @@ def plot_gas_pressure_loading_summary(
         q = np.asarray(surf.cell_data["q_l"], dtype=float)[:, :2]
         qmag = np.linalg.norm(q, axis=1)
 
-        valid = np.isfinite(qmag)
+        faces = surf.faces.reshape(-1, 4)[:, 1:4]
+        points = np.asarray(surf.points, dtype=float)
+        edge_01 = points[faces[:, 1]] - points[faces[:, 0]]
+        edge_02 = points[faces[:, 2]] - points[faces[:, 0]]
+        current_cell_volumes = 0.5 * np.linalg.norm(
+            np.cross(edge_01, edge_02), axis=1
+        )
+
+        valid = (
+            np.isfinite(qmag)
+            & np.isfinite(current_cell_volumes)
+            & (current_cell_volumes > 0.0)
+        )
         qmag = qmag[valid]
+        current_cell_volumes = current_cell_volumes[valid]
 
         if len(qmag) == 0:
             return {
                 "values": np.array([]),
+                "weights": np.array([]),
                 "mean": np.nan,
                 "std": np.nan,
                 "n_cells": 0,
             }
 
+        normalized_weights = current_cell_volumes / np.sum(current_cell_volumes)
+        mean = float(np.sum(normalized_weights * qmag))
+
         return {
             "values": qmag,
-            "mean": float(np.mean(qmag)),
-            "std": float(np.std(qmag)),
+            "weights": current_cell_volumes,
+            "mean": mean,
+            "std": float(
+                np.sqrt(np.sum(normalized_weights * (qmag - mean) ** 2))
+            ),
             "n_cells": int(len(qmag)),
         }
 
     def plot_distribution_subplot(ax, data0, data1, xlim, ymax):
         vals0 = data0["values"]
         vals1 = data1["values"]
+        current_volumes0 = data0["weights"]
+        current_volumes1 = data1["weights"]
 
         bins = np.linspace(xlim[0], xlim[1], 26)
         xgrid = np.linspace(xlim[0], xlim[1], 400)
         bin_width = bins[1] - bins[0]
 
         if len(vals0) > 0:
-            weights0 = np.ones_like(vals0, dtype=float) * 100.0 / len(vals0)
+            weights0 = 100.0 * current_volumes0 / np.sum(current_volumes0)
 
             ax.hist(
                 vals0,
@@ -1695,7 +1922,7 @@ def plot_gas_pressure_loading_summary(
             )
 
         if len(vals1) > 0:
-            weights1 = np.ones_like(vals1, dtype=float) * 100.0 / len(vals1)
+            weights1 = 100.0 * current_volumes1 / np.sum(current_volumes1)
 
             ax.hist(
                 vals1,
@@ -1709,7 +1936,7 @@ def plot_gas_pressure_loading_summary(
             )
 
         if len(vals0) > 1:
-            w0 = np.ones_like(vals0, dtype=float) / len(vals0)
+            w0 = current_volumes0 / np.sum(current_volumes0)
             kde0 = weighted_kde(vals0, w0, xgrid)
 
             ax.plot(
@@ -1720,7 +1947,7 @@ def plot_gas_pressure_loading_summary(
             )
 
         if len(vals1) > 1:
-            w1 = np.ones_like(vals1, dtype=float) / len(vals1)
+            w1 = current_volumes1 / np.sum(current_volumes1)
             kde1 = weighted_kde(vals1, w1, xgrid)
 
             ax.plot(
@@ -1939,6 +2166,7 @@ def plot_gas_pressure_loading_summary(
                 except FileNotFoundError:
                     dist_cache[(mode, pf, probe)] = {
                         "values": np.array([]),
+                        "weights": np.array([]),
                         "mean": np.nan,
                         "std": np.nan,
                         "n_cells": 0,
@@ -1947,7 +2175,7 @@ def plot_gas_pressure_loading_summary(
     if len(all_q) > 0:
         all_q = np.asarray(all_q, dtype=float)
         qmin = 0.0
-        qmax = np.nanpercentile(all_q, 99.2)
+        qmax = np.nanmax(all_q)
 
         if not np.isfinite(qmax) or qmax <= qmin:
             qmax = np.nanmax(all_q)
@@ -1969,12 +2197,13 @@ def plot_gas_pressure_loading_summary(
         if len(vals) == 0:
             continue
 
-        weights = np.ones_like(vals, dtype=float) * 100.0 / len(vals)
+        current_volumes = data["weights"]
+        weights = 100.0 * current_volumes / np.sum(current_volumes)
         hist, _ = np.histogram(vals, bins=bins_tmp, weights=weights, density=False)
         local_max = np.nanmax(hist)
 
         if len(vals) > 1:
-            ww = np.ones_like(vals, dtype=float) / len(vals)
+            ww = current_volumes / np.sum(current_volumes)
             kde = weighted_kde(vals, ww, xgrid_tmp)
             kde_percent = kde * bin_width_tmp * 100.0
             local_max = max(local_max, np.nanmax(kde_percent))
@@ -2163,8 +2392,8 @@ def plot_gas_pressure_loading_summary(
             ax_theta.set_title(r"Principal direction")
             ax_dist_gx.set_title(r"$|\mathbf{q}_{\ell}|$ distribution ($g_x$ probe)")
             ax_dist_gy.set_title(r"$|\mathbf{q}_{\ell}|$ distribution ($g_y$ probe)")
-            ax_pf0.set_title(rf"$p_g={fmt_pg(pf_list[0])}~\mathrm{{kPa}}$")
-            ax_pf1.set_title(rf"$p_g={fmt_pg(pf_list[1])}~\mathrm{{kPa}}$")
+            ax_pf0.set_title(rf"$\tilde p_g={fmt_pg(pf_list[0])}~\mathrm{{kPa}}$")
+            ax_pf1.set_title(rf"$\tilde p_g={fmt_pg(pf_list[1])}~\mathrm{{kPa}}$")
 
         if i_mode == 0:
             ax_dist_gx.legend(
@@ -2174,14 +2403,14 @@ def plot_gas_pressure_loading_summary(
                         [0],
                         color=colors["pg0"],
                         linewidth=2.0,
-                        label=rf"$p_g={pf_list[0]}~\mathrm{{kPa}}$",
+                        label=rf"$\tilde p_g={pf_list[0]}~\mathrm{{kPa}}$",
                     ),
                     Line2D(
                         [0],
                         [0],
                         color=colors["pg1"],
                         linewidth=2.0,
-                        label=rf"$p_g={pf_list[1]}~\mathrm{{kPa}}$",
+                        label=rf"$\tilde p_g={pf_list[1]}~\mathrm{{kPa}}$",
                     ),
                 ],
                 loc="upper left",
@@ -2207,8 +2436,8 @@ def plot_gas_pressure_loading_summary(
         for ax in axes[:, 0]:
             ax.set_ylim(K_min, K_max)
 
-    axes[0, 0].set_ylabel(r"$K_i/K_{i,\mathrm{ref}}$")
-    axes[0, 1].set_ylabel(r"$\theta$ (deg)")
+    axes[0, 0].set_ylabel(r"$\tilde K_i/\tilde K_{i,\mathrm{ref}}$")
+    axes[0, 1].set_ylabel(r"$\tilde\theta$ (deg)")
 
     for i in range(1, n_rows):
         axes[i, 1].set_ylabel("")
@@ -2223,7 +2452,7 @@ def plot_gas_pressure_loading_summary(
             marker=markers["K1"],
             markerfacecolor="white",
             markeredgecolor=colors["pg0"],
-            label=rf"$K_1/K_{{1,\mathrm{{ref}}}},\ p_g={pf_list[0]}~\mathrm{{kPa}}$",
+            label=rf"$\tilde K_1/\tilde K_{{1,\mathrm{{ref}}}},\ \tilde p_g={pf_list[0]}~\mathrm{{kPa}}$",
         ),
         Line2D(
             [0],
@@ -2234,7 +2463,7 @@ def plot_gas_pressure_loading_summary(
             marker=markers["K1"],
             markerfacecolor="white",
             markeredgecolor=colors["pg1"],
-            label=rf"$K_1/K_{{1,\mathrm{{ref}}}},\ p_g={pf_list[1]}~\mathrm{{kPa}}$",
+            label=rf"$\tilde K_1/\tilde K_{{1,\mathrm{{ref}}}},\ \tilde p_g={pf_list[1]}~\mathrm{{kPa}}$",
         ),
         Line2D(
             [0],
@@ -2245,7 +2474,7 @@ def plot_gas_pressure_loading_summary(
             marker=markers["K2"],
             markerfacecolor="white",
             markeredgecolor=colors["pg0"],
-            label=rf"$K_2/K_{{2,\mathrm{{ref}}}},\ p_g={pf_list[0]}~\mathrm{{kPa}}$",
+            label=rf"$\tilde K_2/\tilde K_{{2,\mathrm{{ref}}}},\ \tilde p_g={pf_list[0]}~\mathrm{{kPa}}$",
         ),
         Line2D(
             [0],
@@ -2256,7 +2485,7 @@ def plot_gas_pressure_loading_summary(
             marker=markers["K2"],
             markerfacecolor="white",
             markeredgecolor=colors["pg1"],
-            label=rf"$K_2/K_{{2,\mathrm{{ref}}}},\ p_g={pf_list[1]}~\mathrm{{kPa}}$",
+            label=rf"$\tilde K_2/\tilde K_{{2,\mathrm{{ref}}}},\ \tilde p_g={pf_list[1]}~\mathrm{{kPa}}$",
         ),
         Line2D(
             [0],
@@ -2267,7 +2496,7 @@ def plot_gas_pressure_loading_summary(
             marker=markers["theta"],
             markerfacecolor="white",
             markeredgecolor=colors["pg0"],
-            label=rf"$\theta,\ p_g={pf_list[0]}~\mathrm{{kPa}}$",
+            label=rf"$\tilde\theta,\ \tilde p_g={pf_list[0]}~\mathrm{{kPa}}$",
         ),
         Line2D(
             [0],
@@ -2278,7 +2507,7 @@ def plot_gas_pressure_loading_summary(
             marker=markers["theta"],
             markerfacecolor="white",
             markeredgecolor=colors["pg1"],
-            label=rf"$\theta,\ p_g={pf_list[1]}~\mathrm{{kPa}}$",
+            label=rf"$\tilde\theta,\ \tilde p_g={pf_list[1]}~\mathrm{{kPa}}$",
         ),
     ]
 
@@ -2367,7 +2596,8 @@ def plot_pg_after_stretch_x_summary(
     stream_Ex=0.2,
     stream_probe="gx",
     n_stream_states=6,
-    slice_start=5,
+    slice_start=None,
+    t_ref=T_REF,
     eps=1e-12,
     theta_lift_threshold_deg=-85.0,
     stream_density=0.8,
@@ -2431,6 +2661,7 @@ def plot_pg_after_stretch_x_summary(
             raise ValueError(f"Gas pressure series not found in {filename}")
 
         data = {
+            "t": np.asarray(get(qois_vals, names, "t"), dtype=float),
             "pg": np.asarray(pg, dtype=float),
             "Uxx": np.asarray(get(qois_vals, names, "U_bar_XX"), dtype=float),
             "Uyy": np.asarray(get(qois_vals, names, "U_bar_YY"), dtype=float),
@@ -2537,7 +2768,12 @@ def plot_pg_after_stretch_x_summary(
                 )
             )
 
-        start = max(0, min(slice_start, len(data_gx["pg"]) - 1))
+        if slice_start is None:
+            # reference = frame closest to t_ref (end of the first load step:
+            # p_g = 0 after the prescribed prestretch; the solid is already stretched)
+            start = int(np.argmin(np.abs(data_gx["t"] - t_ref)))
+        else:
+            start = max(0, min(slice_start, len(data_gx["pg"]) - 1))
 
         k1, k2, theta = principal_quantities(K_list)
 
@@ -2863,7 +3099,7 @@ def plot_pg_after_stretch_x_summary(
                 markeredgecolor=color,
                 markeredgewidth=1.0,
                 markevery=markevery,
-                label=r"$K_1$",
+                label=r"$\tilde K_1$",
             )
 
             axk.plot(
@@ -2878,7 +3114,7 @@ def plot_pg_after_stretch_x_summary(
                 markeredgecolor=color,
                 markeredgewidth=1.0,
                 markevery=markevery,
-                label=r"$K_2$",
+                label=r"$\tilde K_2$",
             )
 
         phi_val = phi_vals.get(r0, None)
@@ -2887,10 +3123,10 @@ def plot_pg_after_stretch_x_summary(
         else:
             axk.set_title(rf"$\tilde{{\Phi}}_{{g0}} = {phi_val:.2f}$")
 
-        axk.set_xlabel(r"$p_g$ (kPa)")
+        axk.set_xlabel(r"$\tilde p_g$ (kPa)")
 
         if i_r0 == 0:
-            axk.set_ylabel(r"$K_i/K_{i,p_g=0}$")
+            axk.set_ylabel(r"$\tilde K_i/\tilde K_{i,\tilde p_g=0}$")
 
         axk.grid(False)
         axk.tick_params(axis="both", labelsize=11)
@@ -2911,9 +3147,15 @@ def plot_pg_after_stretch_x_summary(
             ax.axis("off")
 
     ex_handles = [
-        Line2D([0], [0], color=ex_colors[i], linewidth=2.0, label=rf"$E_x = {fmt_disp(Ex)}$")
-        for i, Ex in enumerate(Ex_list)
-    ]
+    Line2D(
+        [0],
+        [0],
+        color=ex_colors[i],
+        linewidth=2.0,
+        label=rf"$\Delta\lambda_x = {fmt_disp(Ex)}$",
+    )
+    for i, Ex in enumerate(Ex_list)]
+
 
     style_handles = [
         Line2D(
@@ -2924,7 +3166,7 @@ def plot_pg_after_stretch_x_summary(
             marker="o",
             markerfacecolor="white",
             markeredgecolor="black",
-            label=r"$K_1$",
+            label=r"$\tilde K_1$",
         ),
         Line2D(
             [0], [0],
@@ -2934,7 +3176,7 @@ def plot_pg_after_stretch_x_summary(
             marker="s",
             markerfacecolor="white",
             markeredgecolor="black",
-            label=r"$K_2$",
+            label=r"$\tilde K_2$",
         ),
     ]
 
@@ -2992,7 +3234,7 @@ def plot_pg_after_stretch_x_summary(
         fig.text(
             0.5 * (x0 + x1),
             arrow_y - 0.030,
-            r"$p_g$ (kPa)",
+            r"$\tilde p_g$ (kPa)",
             ha="center",
             va="top",
         )
@@ -3017,7 +3259,7 @@ def plot_pg_after_stretch_x_summary(
 
     print(f"Saved: {save_name}")
 
-def plot_figure9_summary(
+def plot_figure10_loading_summary(
     r0_list,
     cases=None,
     loading_text=None,
@@ -3025,10 +3267,11 @@ def plot_figure9_summary(
     prefix="Fig_loading",
     pg=0.2,
     r0_to_phi=None,
-    slice_start=5,
+    slice_start=None,
+    t_ref=T_REF,
     final_index=-1,
     eps=1e-12,
-    save_name="plots/Figure9_summary.png",
+    save_name="plots/Figure10_loading_summary.png",
     show_plot=False,
 ):
 
@@ -3038,25 +3281,25 @@ def plot_figure9_summary(
         cases = [
             {
                 "mode": "stretch_x",
-                "label": "uniaxial loading",
+                "label": "uniaxial stretching",
                 "pf": 0.0,
                 "use_prediction": True,
             },
             {
                 "mode": "volumic",
-                "label": "pure volumetric loading",
+                "label": "equibiaxial stretching",
                 "pf": 0.0,
                 "use_prediction": True,
             },
             {
                 "mode": "simple_shear",
-                "label": "simple shear loading",
+                "label": "simple shear",
                 "pf": 0.0,
                 "use_prediction": True,
             },
             {
                 "mode": "gas_pressure",
-                "label": "gas pressure loading",
+                "label": "gas pressure",
                 "pf": pg,
                 "use_prediction": True,
             },
@@ -3064,24 +3307,24 @@ def plot_figure9_summary(
 
     if loading_text is None:
         loading_text = {
-            "uniaxial loading": r"$E_x=0.3$",
-            "pure volumetric loading": r"$E_x=E_y=0.3$",
-            "simple shear loading": r"$E_{xy}=0.3$",
-            "gas pressure loading": rf"$p_g={pg}~\mathrm{{kPa}}$",
+            "uniaxial stretching": r"$\Delta\lambda_x=0.3$",
+            "equibiaxial stretching": r"$\Delta\lambda_x=\Delta\lambda_y=0.3$",
+            "simple shear": r"$\gamma=0.3$",
+            "gas pressure": rf"$\tilde p_g={pg}~\mathrm{{kPa}}$",
         }
 
     colors = {
-        "uniaxial loading": "#0072B2",
-        "pure volumetric loading": "#D55E00",
-        "simple shear loading": "#009E73",
-        "gas pressure loading": "#CC79A7",
+        "uniaxial stretching": "#0072B2",
+        "equibiaxial stretching": "#D55E00",
+        "simple shear": "#009E73",
+        "gas pressure": "#CC79A7",
     }
 
     markers = {
-        "uniaxial loading": "o",
-        "pure volumetric loading": "s",
-        "simple shear loading": "^",
-        "gas pressure loading": "D",
+        "uniaxial stretching": "o",
+        "equibiaxial stretching": "s",
+        "simple shear": "^",
+        "gas pressure": "D",
     }
 
     def fmt_candidates(x):
@@ -3142,16 +3385,21 @@ def plot_figure9_summary(
 
     def read_probe(filename):
         qois_vals, names = load_qois(filename)
+        start = (
+            reference_frame_index(qois_vals, names, t_ref)
+            if slice_start is None
+            else slice_start
+        )
 
         data = {
-            "Uxx": np.asarray(get(qois_vals, names, "U_bar_XX")[slice_start:], dtype=float),
-            "Uyy": np.asarray(get(qois_vals, names, "U_bar_YY")[slice_start:], dtype=float),
-            "Uxy": np.asarray(get(qois_vals, names, "U_bar_XY")[slice_start:], dtype=float),
-            "Uyx": np.asarray(get(qois_vals, names, "U_bar_YX")[slice_start:], dtype=float),
-            "Qx": np.asarray(get(qois_vals, names, "Q_l_avg_x")[slice_start:], dtype=float),
-            "Qy": np.asarray(get(qois_vals, names, "Q_l_avg_y")[slice_start:], dtype=float),
-            "gx": np.asarray(get(qois_vals, names, "grad_p_bar_avg_x")[slice_start:], dtype=float),
-            "gy": np.asarray(get(qois_vals, names, "grad_p_bar_avg_y")[slice_start:], dtype=float),
+            "Uxx": np.asarray(get(qois_vals, names, "U_bar_XX")[start:], dtype=float),
+            "Uyy": np.asarray(get(qois_vals, names, "U_bar_YY")[start:], dtype=float),
+            "Uxy": np.asarray(get(qois_vals, names, "U_bar_XY")[start:], dtype=float),
+            "Uyx": np.asarray(get(qois_vals, names, "U_bar_YX")[start:], dtype=float),
+            "Qx": np.asarray(get(qois_vals, names, "Q_l_avg_x")[start:], dtype=float),
+            "Qy": np.asarray(get(qois_vals, names, "Q_l_avg_y")[start:], dtype=float),
+            "gx": np.asarray(get(qois_vals, names, "grad_p_bar_avg_x")[start:], dtype=float),
+            "gy": np.asarray(get(qois_vals, names, "grad_p_bar_avg_y")[start:], dtype=float),
         }
 
         npts = len(data["Uxx"])
@@ -3304,9 +3552,9 @@ def plot_figure9_summary(
     fig, axes = plt.subplots(1, 3, figsize=(12.5, 3.9))
 
     plot_settings = [
-        ("C_K", r"$C_K=\mathrm{tr}(\mathbf{K})/\mathrm{tr}(\mathbf{K}_0)$"),
-        ("A_K", r"$A_K=K_{\max}/K_{\min}$"),
-        ("E_K", r"$E_K=\|\mathbf{K}-\mathbf{K}^{kin}\|_F/\|\mathbf{K}\|_F$"),
+        ("C_K", r"$C_K=\mathrm{tr}(\tilde{\mathbf{K}})/\mathrm{tr}(\tilde{\mathbf{K}}_0)$"),
+        ("A_K", r"$A_K=\tilde K_1/\tilde K_2$"),
+        ("E_K", r"$E_K=\|\tilde{\mathbf{K}}-\bar{\mathbf{K}}\|_F/\|\tilde{\mathbf{K}}\|_F$"),
     ]
 
     for ax, (key, ylabel) in zip(axes, plot_settings):
@@ -4259,11 +4507,11 @@ def plot_q_vs_gradp(
             fontsize=14,
         )
 
-        if i_r0 == 0:
-            ax_qx.set_ylabel(
-                r"$\tilde{Q}_{\ell,x}$",
-                fontsize=14,
-            )
+
+        ax_qx.set_ylabel(
+            r"$\tilde{Q}_{\ell,x}$",
+            fontsize=14,
+        )
 
 
 
@@ -4511,4 +4759,3 @@ def plot_q_vs_gradp(
     print(f"Saved: {save_name}")
 
     return results
-
