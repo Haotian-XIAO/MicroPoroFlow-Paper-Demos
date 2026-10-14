@@ -27,6 +27,8 @@ import pandas as pd
 from matplotlib.lines import Line2D
 from scipy.interpolate import PchipInterpolator
 
+from Quiet_Microporoflow import display_path
+
 T_REF = 0.01
 K_M = 1e-6
 EPS = 1e-12
@@ -63,7 +65,7 @@ def require_files(groups):
     if missing:
         lines = ["Missing input files. Run the following notebook(s) first (with their do_* switches on):"]
         for nb, ps in missing.items():
-            lines.append(f"  {nb}: {len(ps)} missing file(s), e.g. {ps[0]}")
+            lines.append(f"  {nb}: {len(ps)} missing file(s), e.g. {display_path(ps[0])}")
         raise FileNotFoundError("\n".join(lines))
     n = sum(len(ps) for ps in groups.values())
     print(f"All {n} input files found ({', '.join(groups)}).")
@@ -336,7 +338,7 @@ def plot_figure11(d, save_name):
     cb = fig.colorbar(sm, ax=[axa, axb, axc], pad=0.02, fraction=0.05)
     cb.set_label(r"$r_0$")
     fig.savefig(save_name, bbox_inches="tight")
-    print("Figure saved in:", save_name)
+    print("Figure saved in:", display_path(save_name))
     return fig
 
 
@@ -546,7 +548,7 @@ def write_fig11_tables(d, out_dir, fig10_dir):
     (out_dir / "fig11_report.md").write_text(fig11_report(d))
     names = ["kappa0_table.csv", "table2_refined.csv", "deviation_range_default.csv", "anisotropy.csv",
              "path_independence.csv", "l1_decomposition_h.csv", "fig11_report.md"]
-    print("Tables written in", out_dir, ":", ", ".join(names))
+    print("Tables written in", display_path(out_dir), ":", ", ".join(names))
 
 
 # ============================================================================================ state-function test (Fig10)
@@ -656,7 +658,7 @@ def write_state_function_test(rows, out_dir):
                 f"{r['dC_abs_L1']:+.4f}   {r['dC_rel_L1']:+.2%}   {r['dA_L1']:+.4f} {fmt_th(r['dtheta_L1'])} {r['E_K_L1']:.4f}")
     lines.append(f"\nmax |J - det F| over all cases: {max(abs(r['J_minus_detF']) for r in rows):.1e}")
     (out_dir / "summary.txt").write_text("\n".join(lines) + "\n")
-    print("State-function test written in", out_dir, ": state_function_test_results.csv, summary.txt")
+    print("State-function test written in", display_path(out_dir), ": state_function_test_results.csv, summary.txt")
 
 
 def _row(rows, mode, r0):
@@ -675,20 +677,17 @@ def print_state_function_numbers(rows):
     ek = _argmax(rows, "volumic", "E_K_L0")
     print("Default mesh (l = 0.03), Fig. 10 data; reference frame t = 0.01; final frame.")
     print(f"[Abstract] kinematic update, equibiaxial r0 = 0.07 (Phi_g0 = {r07['Phi_g0']:.4f}): "
-          f"C_K error = {100 * r07['dC_rel_L0']:+.2f}%  (existing: +11.46%, Phi_g0 = 0.0147)")
+          f"C_K error = {100 * r07['dC_rel_L0']:+.2f}%")
     print(f"[Introduction] kinematic update, equibiaxial, maximum over r0: {100 * rmax['dC_rel_L0']:+.2f}% "
-          f"(r0 = {rmax['r0']:g})  (existing: +51.48%, r0 = 0.41)")
-    print(f"[Sec. 3.5.1] E_K of the kinematic update, equibiaxial, maximum: {ek['E_K_L0']:.4f} (r0 = {ek['r0']:g})  "
-          f"(existing: 0.5148)")
+          f"(r0 = {rmax['r0']:g})")
+    print(f"[Sec. 3.5.1] E_K of the kinematic update, equibiaxial, maximum: {ek['E_K_L0']:.4f} (r0 = {ek['r0']:g})")
     sh = [r["C_K_rve"] for r in rows if r["mode"] == "simple_shear"]
     print(f"[Sec. 3.5.1] simple shear: C_K in [{min(sh):.4f}, {max(sh):.4f}], max |1 - C_K| = "
-          f"{100 * max(abs(1 - c) for c in sh):.2f}%  (existing: 0.9549-1.0393, 4.5%)")
-    for mode, ex in (("stretch_x", "1.236-2.128"), ("simple_shear", "1.111-1.774"), ("volumic", "1.000"),
-                     ("gas_pressure", "1.000")):
+          f"{100 * max(abs(1 - c) for c in sh):.2f}%")
+    for mode in ("stretch_x", "simple_shear", "volumic", "gas_pressure"):
         a = [r["A_K_rve"] for r in rows if r["mode"] == mode]
-        print(f"[Sec. 3.5.1] A_K {mode}: [{min(a):.4f}, {max(a):.4f}]  (existing: {ex})")
-    print(f"[Sec. 3.5.2] equibiaxial r0 = 0.07: J = {r07['J']:.4f}, Phi_g0 = {r07['Phi_g0']:.4f} -> phi_g = {r07['phi_g']:.4f}  "
-          f"(existing: 1.6900, 0.0147 -> 0.0720)")
+        print(f"[Sec. 3.5.1] A_K {mode}: [{min(a):.4f}, {max(a):.4f}]")
+    print(f"[Sec. 3.5.2] equibiaxial r0 = 0.07: J = {r07['J']:.4f}, Phi_g0 = {r07['Phi_g0']:.4f} -> phi_g = {r07['phi_g']:.4f}")
 
 
 # ============================================================================================ Fig. 11 paper numbers
@@ -698,23 +697,23 @@ def _pct(v, nd=3):
 
 
 def paper_numbers(d, fig10_dir):
-    """Rows (location, quantity, data, value, existing value) of the numbers quoted in the paper that come from
+    """Rows (location, quantity, data, value) of the numbers quoted in the paper that come from
     the Fig. 11 data (and, for the abstract and the introduction, from the Fig. 10 data)."""
     out = []
 
-    def add(loc, what, data, value, existing):
-        out.append(dict(location=loc, quantity=what, data=data, value=value, existing=existing))
+    def add(loc, what, data, value):
+        out.append(dict(location=loc, quantity=what, data=data, value=value))
 
     sft = state_function_rows(fig10_dir, d["r0_list"])
     r07 = _row(sft, "volumic", 0.07)
     rmax = _argmax(sft, "volumic", "dC_rel_L0")
     add("Abstract", f"kinematic update error, equibiaxial r0 = 0.07 (Phi_g0 = {r07['Phi_g0']:.4f})",
-        "default mesh l = 0.03 (Fig. 10)", _pct(r07["dC_rel_L0"], 2), "+11.46% (Phi_g0 = 0.0147)")
+        "default mesh l = 0.03 (Fig. 10)", _pct(r07["dC_rel_L0"], 2))
     add("Introduction", f"kinematic update error, equibiaxial, max over r0 (r0 = {rmax['r0']:g})",
-        "default mesh l = 0.03 (Fig. 10)", _pct(rmax["dC_rel_L0"], 2), "+51.48% (r0 = 0.41)")
+        "default mesh l = 0.03 (Fig. 10)", _pct(rmax["dC_rel_L0"], 2))
 
     ref = d["ref"]
-    for mode, ex in (("volumic", "1.62% (r0 = 0.41)"), ("gas_pressure", "0.68%")):
+    for mode in ("volumic", "gas_pressure"):
         errs = []
         for r0 in d["r0_list"]:
             x = ref[(mode, r0)]
@@ -722,23 +721,23 @@ def paper_numbers(d, fig10_dir):
             errs.append((abs(h(x["phi"][-1]) / h(x["phi"][0]) / C_rve - 1.0), r0))
         e, r0 = max(errs)
         add("Abstract; Sec. 3.5.2", f"gas-fraction update vs RVE, |C_h/C_RVE - 1|, {mode}, max over r0 (r0 = {r0:g})",
-            "refined mesh (Fig. 11(b))", f"{100 * e:.2f}%", ex)
+            "refined mesh (Fig. 11(b))", f"{100 * e:.2f}%")
 
     x = ref[("volumic", 0.07)]
     add("Sec. 3.5.2", "equibiaxial r0 = 0.07: J final, Phi_g0 -> phi_g final", "refined mesh (Fig. 11(b))",
-        f"J = {x['J'][-1]:.4f}, {x['phi'][0]:.4f} -> {x['phi'][-1]:.4f}", "J = 1.6900, 0.0147 -> 0.0722")
+        f"J = {x['J'][-1]:.4f}, {x['phi'][0]:.4f} -> {x['phi'][-1]:.4f}")
 
     pi_rows, pi9 = path_independence_rows(d)
     big = max(pi_rows, key=lambda r: abs(r["rel"]))
     add("Sec. 3.5.2", f"path independence: gas pressure vs equibiaxial at equal phi_g, max |rel| (r0 = {big['r0']:g})",
-        "default mesh (Fig. 11(a))", f"{100 * big['rel']:+.4f}%", "-0.0098% (r0 = 0.35)")
+        "default mesh (Fig. 11(a))", f"{100 * big['rel']:+.4f}%")
     add("Sec. 3.5.2", f"path independence: Fig. 9 (+0.2 kPa) vs equibiaxial r0 = 0.41, max |rel| over {pi9['n_frames']} frames",
-        "default mesh (Fig. 11(a))", f"{100 * pi9['max_abs_rel']:.4f}%", "0.004% (19 frames)")
+        "default mesh (Fig. 11(a))", f"{100 * pi9['max_abs_rel']:.4f}%")
 
     devs = [(x["dev"].max(), k) for k, x in ref.items()]
     v, k = max(devs)
     add("Sec. 3.5.2", f"max deviation above kappa0, symmetric loadings ({k[0]} r0 = {k[1]:g})",
-        "refined mesh, refined kappa0 (Fig. 11(b))", _pct(v), "+1.749% (volumic r0 = 0.30)")
+        "refined mesh, refined kappa0 (Fig. 11(b))", _pct(v))
 
     exc = []
     for k, x in ref.items():
@@ -748,31 +747,30 @@ def paper_numbers(d, fig10_dir):
     v, k, ph = max(exc)
     over = sorted(f"{kk[0]} r0={kk[1]:g}" for vv, kk, _ in exc if vv > 0)
     add("Sec. 3.5.2", f"max excess over the HS bound ({k[0]} r0 = {k[1]:g}, phi_g = {ph:.4f}); branches above h: "
-        + ", ".join(over), "refined mesh (Fig. 11(b))", _pct(v), "+0.228% (volumic r0 = 0.15); only volumic r0 <= 0.20")
+        + ", ".join(over), "refined mesh (Fig. 11(b))", _pct(v))
 
-    for mode, ex in (("stretch_x", "-5.851% (r0 = 0.45; 13-point kappa0)"), ("simple_shear", "-4.095% (r0 = 0.41; 13-point kappa0)")):
+    for mode in ("stretch_x", "simple_shear"):
         v, r0 = min((d["data"][(mode, r0)][2].min(), r0) for r0 in d["r0_list"])
         add("Sec. 3.5.2", f"min deviation from kappa0, {mode} (r0 = {r0:g})",
-            "default mesh, default 49-point kappa0 (Fig. 11(b) gray)", _pct(v), ex)
+            "default mesh, default 49-point kappa0 (Fig. 11(b) gray)", _pct(v))
 
-    for mode, ex in (("stretch_x", "0.3144 (r0 = 0.45)"), ("simple_shear", "0.2426 (r0 = 0.45)")):
+    for mode in ("stretch_x", "simple_shear"):
         v, r0 = max((d["data"][(mode, r0)][4].max(), r0) for r0 in d["r0_list"])
-        add("Sec. 3.5.2", f"max anisotropy a_D, {mode} (r0 = {r0:g})", "default mesh (Fig. 11(c))", f"{v:.4f}", ex)
+        add("Sec. 3.5.2", f"max anisotropy a_D, {mode} (r0 = {r0:g})", "default mesh (Fig. 11(c))", f"{v:.4f}")
 
     l1 = l1_decomposition_rows(fig10_dir, d["r0_list"])
-    for mode, ex in (("stretch_x", "aniso 0.1929, size -0.0474 (ratio 4.07)"),
-                     ("simple_shear", "aniso 0.1570, size -0.0454 (ratio 3.46)")):
+    for mode in ("stretch_x", "simple_shear"):
         r = next(r for r in l1 if r["mode"] == mode and abs(r["r0"] - 0.30) < 1e-12)
         rr = [q["aniso_over_abs_size"] for q in l1 if q["mode"] == mode]
         add("Sec. 3.5.2", f"L1(h) error at the final frame, {mode} r0 = 0.30: anisotropy, size (ratio); ratio over all r0",
             "default mesh (Fig. 10)", f"aniso {r['aniso']:.4f}, size {r['size']:+.4f} (ratio {r['aniso_over_abs_size']:.2f}); "
-            f"all r0: {min(rr):.2f}-{max(rr):.2f}", ex)
+            f"all r0: {min(rr):.2f}-{max(rr):.2f}")
     return out
 
 
 def print_paper_numbers(rows):
     for r in rows:
-        print(f"[{r['location']}] {r['quantity']}\n    = {r['value']}    [{r['data']}]    existing: {r['existing']}")
+        print(f"[{r['location']}] {r['quantity']}\n    = {r['value']}    [{r['data']}]")
 
 
 # ============================================================================================ Sec. 2.4 (Fig11-refined)
@@ -800,16 +798,14 @@ def mesh_convergence_rows(ref_dir, fig10_dir, r0_list=(0.07, 0.10)):
 
 def print_mesh_convergence(rows, out_csv):
     _write_csv(out_csv, rows)
-    existing = {0.07: ("-0.48%", "-0.56%", "-0.08%"), 0.10: ("-0.41%", "-0.51%", "-0.10%")}
     for r in rows:
-        ex = existing.get(round(r["r0"], 2), ("-", "-", "-"))
         print(f"[Sec. 2.4] equibiaxial r0 = {r['r0']:g}, J = {r['J_final_refined']:.4f}, refined vs default mesh:")
         print(f"    metric 1, C_K = tr K(final)/tr K(t = 0.01): {r['C_K_default']:.5f} -> {r['C_K_refined']:.5f}, "
-              f"change {100 * r['dC_K_rel']:+.2f}%  (existing: {ex[0]})")
+              f"change {100 * r['dC_K_rel']:+.2f}%")
         print(f"    metric 2, tr K/(2 k_m) at the final frame: {r['K_final_default']:.6f} -> {r['K_final_refined']:.6f}, "
-              f"change {100 * r['dK_final_rel']:+.2f}%  (existing: {ex[1]})")
-        print(f"    (reference frame t = 0.01: change {100 * r['dK_ref_rel']:+.2f}%, existing: {ex[2]})")
-    print("Written:", out_csv)
+              f"change {100 * r['dK_final_rel']:+.2f}%")
+        print(f"    (reference frame t = 0.01: change {100 * r['dK_ref_rel']:+.2f}%)")
+    print("Written:", display_path(out_csv))
 
 
 # ============================================================================================ Sec. 3.1 (Fig3)
@@ -846,14 +842,12 @@ def hs_check_linear(res_folder, shape_list, r0_list, out_csv, eps=1e-12):
     df["gap_eq"] = df["h"] / df["Keq"] - 1.0
     df["gap_K1"] = df["h"] / df["K1"] - 1.0
     df.to_csv(out_csv, index=False)
-    print("Written:", out_csv)
+    print("Written:", display_path(out_csv))
     return df
 
 
 def print_hs_check(df):
-    existing = {"hex": "1.65% (r0 = 0.41)", "round": "3.64% (r0 = 0.45)"}
     for shape, g in df.groupby("shape", sort=False):
         i = g["gap_eq"].abs().idxmax()
         print(f"[Sec. 3.1] {shape}: max |h/Keq - 1| = {100 * abs(df.loc[i, 'gap_eq']):.2f}% (r0 = {df.loc[i, 'r0']:g}, "
-              f"phi = {df.loc[i, 'phi']:.4f}); h/Keq - 1 in [{100 * g['gap_eq'].min():+.3f}%, {100 * g['gap_eq'].max():+.3f}%]"
-              f"  (existing: {existing.get(shape, '-')})")
+              f"phi = {df.loc[i, 'phi']:.4f}); h/Keq - 1 in [{100 * g['gap_eq'].min():+.3f}%, {100 * g['gap_eq'].max():+.3f}%]")

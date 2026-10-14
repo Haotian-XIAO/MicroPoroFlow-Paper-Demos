@@ -5,16 +5,30 @@
 import json
 import os
 import sys
+import warnings
 
 import matplotlib.pyplot as plt
 import matplotlib.tri as mtri
 import numpy as np
 import pandas as pd
-import pyvista as pv
+
+from Quiet_Microporoflow import display_path, import_pyvista
+
+pv = import_pyvista()  # = import pyvista as pv, without the VTK/tqdm start-up messages (see Quiet_Microporoflow.py)
 
 from matplotlib.lines import Line2D
 from matplotlib.patches import Circle, FancyArrowPatch, Rectangle, RegularPolygon
 from matplotlib.ticker import FormatStrFormatter, FuncFormatter, MaxNLocator
+# Two warnings issued from this module, ignored for this module and these messages only:
+# - PyVista 0.48: extract_surface() without `algorithm` warns that its default ('dataset_surface') will change
+#   in a future version; the current default is the one used for the figures.
+# - Matplotlib: the figures with a colorbar or inset axes warn that these axes are "not compatible with
+#   tight_layout"; the layout of these figures is final (checked against the published figures).
+warnings.filterwarnings("ignore", message="The default value of `algorithm` for the filter",
+                        category=pv.core.errors.PyVistaFutureWarning, module="Plot_Microporoflow")
+warnings.filterwarnings("ignore", message="This figure includes Axes that are not compatible with tight_layout",
+                        category=UserWarning, module="Plot_Microporoflow")
+
 plt.rcParams.update({
     "font.size": 15,
     "axes.titlesize": 16,
@@ -212,11 +226,11 @@ def plot_linear_homogenization_hollowbox(
             file_gy = build_qois_filename(shape, r0, "gy")
 
             if not os.path.exists(file_gx):
-                print(f"[WARNING] Missing file: {file_gx}")
+                print(f"[WARNING] Missing file: {display_path(file_gx)}")
                 continue
 
             if not os.path.exists(file_gy):
-                print(f"[WARNING] Missing file: {file_gy}")
+                print(f"[WARNING] Missing file: {display_path(file_gy)}")
                 continue
 
             data_gx = read_probe(file_gx)
@@ -280,7 +294,7 @@ def plot_linear_homogenization_hollowbox(
 
     csv_name = save_name.replace(".png", ".csv")
     df.to_csv(csv_name, index=False)
-    print("Saved:", csv_name)
+    print("Saved:", display_path(csv_name))
 
     phi_min = float(df["phi"].min())
     phi_max = float(df["phi"].max())
@@ -441,7 +455,7 @@ def plot_linear_homogenization_hollowbox(
 
     plt.close()
 
-    print("Saved:", save_name)
+    print("Saved:", display_path(save_name))
 
 
 def plot_principal_K_vs_U(
@@ -945,11 +959,11 @@ def plot_principal_K_vs_U(
             filename_gy = build_filename(r0, pf, "gy")
 
             if not os.path.exists(filename_gx):
-                print(f"[WARNING] File missing: {filename_gx}")
+                print(f"[WARNING] File missing: {display_path(filename_gx)}")
                 continue
 
             if not os.path.exists(filename_gy):
-                print(f"[WARNING] File missing: {filename_gy}")
+                print(f"[WARNING] File missing: {display_path(filename_gy)}")
                 continue
 
             if phi_val is None:
@@ -1562,7 +1576,7 @@ def plot_principal_K_vs_U(
 
     plt.close()
 
-    print(f"Saved: {save_name}")
+    print(f"Saved: {display_path(save_name)}")
 
 
 
@@ -2584,7 +2598,7 @@ def plot_gas_pressure_loading_summary(
 
     plt.close()
 
-    print(f"Saved: {save_name}")
+    print(f"Saved: {display_path(save_name)}")
 
 def plot_pg_after_stretch_x_summary(
     res_folder="results_multi_pg_after_stretch_x",
@@ -3257,7 +3271,7 @@ def plot_pg_after_stretch_x_summary(
 
     plt.close()
 
-    print(f"Saved: {save_name}")
+    print(f"Saved: {display_path(save_name)}")
 
 def plot_figure10_loading_summary(
     r0_list,
@@ -3624,7 +3638,7 @@ def plot_figure10_loading_summary(
 
     plt.close()
 
-    print(f"Saved: {save_name}")
+    print(f"Saved: {display_path(save_name)}")
 
     return rows
 
@@ -4756,6 +4770,6 @@ def plot_q_vs_gradp(
 
     plt.close()
 
-    print(f"Saved: {save_name}")
+    print(f"Saved: {display_path(save_name)}")
 
     return results

@@ -25,6 +25,8 @@ import dolfin
 import gmsh
 import dolfin_mech as dmech
 
+from Quiet_Microporoflow import display_path
+
 MATERIAL_PARAMETERS = {"alpha": 0.16, "gamma": 0.5, "c1": 0.2, "c2": 0.4, "kappa": 1e2, "eta": 1e-5}
 
 # Original objects replaced temporarily by local_refinement() and lu_solver(). The raw class attribute
@@ -254,4 +256,4 @@ def run_case_list(run_case, cases, res_folder):
             run_case(res_folder=res_folder, **kw)
         check_restored()
         print(f"[{i}/{n}] done in {time.time() - t0:.1f} s", flush=True)
-    print(f"{n} cases done in {(time.time() - t_all) / 60:.1f} min; results in {res_folder}")
+    print(f"{n} cases done in {(time.time() - t_all) / 60:.1f} min; results in {display_path(res_folder)}")
