@@ -8,3 +8,6 @@ chapters:
   - file: demos/Fig8
   - file: demos/Fig9
   - file: demos/Fig10
+  - file: demos/Fig11-kappa0
+  - file: demos/Fig11-refined
+  - file: demos/Fig11
