@@ -15,6 +15,10 @@ permissions:
 
 jobs:
   build-and-push:
+    # Frozen: the image was built on 2026-10-15 from commit c226539 (tag c2265396c596, used in .binder/Dockerfile).
+    # After any change of the environment (.repo2docker/), remove "if: false" to rebuild, then update the tag in .binder/Dockerfile.
+    if: false
+
     runs-on: ubuntu-latest
 
     steps:
