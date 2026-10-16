@@ -4,7 +4,7 @@
 # (final title, journal, DOI).
 title: "Welcome to [Xiao & Genet (2026). Effective permeability of double-scale porous media under finite deformation: a three-phase micro-poro-mechanics framework. In preparation.]'s demos!"
 author: Haotian Xiao, Martin Genet
-logo: logo.png
+logo: images/logo.png
 copyright: "2026"
 only_build_toc_files: true
 
