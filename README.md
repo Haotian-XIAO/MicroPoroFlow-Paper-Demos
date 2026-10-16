@@ -1,6 +1,6 @@
 # Welcome to [Xiao & Genet (2026). Effective permeability of double-scale porous media under finite deformation: a three-phase micro-poro-mechanics framework. In preparation.]'s demos!
 
-Static and interactive demos can be found at [https://haotian-xiao.github.io/MicroPoroFlow-Paper-Demos](https://haotian-xiao.github.io/MicroPoroFlow-Paper-Demos/), or directly on [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/Haotian-XIAO/MicroPoroFlow-Paper-Demos/main?urlpath=lab/tree/./demos).
+Static and interactive demos can be found at [https://haotian-xiao.github.io/MicroPoroFlow-Paper-Demos](https://haotian-xiao.github.io/MicroPoroFlow-Paper-Demos/), or directly on [![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/Haotian-XIAO/MicroPoroFlow-Paper-Demos/main?urlpath=lab/tree/./demos). [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23424739.svg)](https://doi.org/10.5281/zenodo.23424739)
 
 ## Notebooks
 
