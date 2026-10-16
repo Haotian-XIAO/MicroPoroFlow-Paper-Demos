@@ -292,9 +292,12 @@ def plot_linear_homogenization_hollowbox(
 
     df = df.sort_values(["shape", "phi"]).reset_index(drop=True)
 
-    csv_name = save_name.replace(".png", ".csv")
-    df.to_csv(csv_name, index=False)
-    print("Saved:", display_path(csv_name))
+    # The table is saved next to a PNG figure only: for a PDF figure, save_name.replace(".png", ".csv") is the
+    # figure path itself, which plt.savefig overwrites below.
+    if save_name.endswith(".png"):
+        csv_name = save_name.replace(".png", ".csv")
+        df.to_csv(csv_name, index=False)
+        print("Saved:", display_path(csv_name))
 
     phi_min = float(df["phi"].min())
     phi_max = float(df["phi"].max())
@@ -2758,8 +2761,13 @@ def plot_pg_after_stretch_x_summary(
         data_gx = read_probe(file_gx)
         data_gy = read_probe(file_gy)
 
+        # The gx and gy probe runs of a case must have the same loading history. Their macroscopic displacement
+        # gradients differ by numerical noise only (up to ~1e-4 of the deformation, from the different probe
+        # gradients); warn if a difference exceeds 1e-3 of the largest component (pg: of the largest pressure).
+        U_scale = max(np.abs(data_gx[k]).max() for k in ["Uxx", "Uyy", "Uxy", "Uyx"])
         for key in ["pg", "Uxx", "Uyy", "Uxy", "Uyx"]:
-            if not np.allclose(data_gx[key], data_gy[key], rtol=1e-5, atol=1e-8):
+            scale = np.abs(data_gx["pg"]).max() if key == "pg" else U_scale
+            if np.abs(data_gx[key] - data_gy[key]).max() > 1e-3 * scale:
                 print(f"Warning: {key} differs between gx and gy for r0={r0}, Ex={Ex}")
 
         gx = data_gx["gx"]

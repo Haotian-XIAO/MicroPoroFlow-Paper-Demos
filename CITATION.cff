@@ -1,4 +1,5 @@
 cff-version: 1.2.0
+message: "If you use these demos, please cite them as below."
 authors:
   - family-names: Xiao
     given-names: Haotian

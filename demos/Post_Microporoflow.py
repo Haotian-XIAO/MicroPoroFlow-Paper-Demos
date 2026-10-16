@@ -814,7 +814,8 @@ def hs_check_linear(res_folder, shape_list, r0_list, out_csv, eps=1e-12):
     """Linear homogenization of Fig. 3 against the 2D HS bound h(phi) = (1 - phi)/(1 + phi).
 
     Same K as plot_linear_homogenization_hollowbox (last frame, K1 >= K2 principal values of sym K,
-    Keq = (K1 + K2)/2, phi = mesh porosity), plus h, gap_eq = h/Keq - 1 and gap_K1 = h/K1 - 1."""
+    Keq = (K1 + K2)/2, phi = mesh porosity), plus h and the deviations relative to the HS bound,
+    gap_eq = 1 - Keq/h and gap_K1 = 1 - K1/h (positive below the bound)."""
     rows = []
     for shape in shape_list:
         for r0 in r0_list:
@@ -839,8 +840,8 @@ def hs_check_linear(res_folder, shape_list, r0_list, out_csv, eps=1e-12):
                              Keq=0.5 * (K1 + K2)))
     df = pd.DataFrame(rows).sort_values(["shape", "phi"]).reset_index(drop=True)
     df["h"] = h(df["phi"])
-    df["gap_eq"] = df["h"] / df["Keq"] - 1.0
-    df["gap_K1"] = df["h"] / df["K1"] - 1.0
+    df["gap_eq"] = 1.0 - df["Keq"] / df["h"]
+    df["gap_K1"] = 1.0 - df["K1"] / df["h"]
     df.to_csv(out_csv, index=False)
     print("Written:", display_path(out_csv))
     return df
@@ -849,5 +850,5 @@ def hs_check_linear(res_folder, shape_list, r0_list, out_csv, eps=1e-12):
 def print_hs_check(df):
     for shape, g in df.groupby("shape", sort=False):
         i = g["gap_eq"].abs().idxmax()
-        print(f"[Sec. 3.1] {shape}: max |h/Keq - 1| = {100 * abs(df.loc[i, 'gap_eq']):.2f}% (r0 = {df.loc[i, 'r0']:g}, "
-              f"phi = {df.loc[i, 'phi']:.4f}); h/Keq - 1 in [{100 * g['gap_eq'].min():+.3f}%, {100 * g['gap_eq'].max():+.3f}%]")
+        print(f"[Sec. 3.1] {shape}: max |1 - Keq/h| = {100 * abs(df.loc[i, 'gap_eq']):.2f}% (r0 = {df.loc[i, 'r0']:g}, "
+              f"phi = {df.loc[i, 'phi']:.4f}); 1 - Keq/h in [{100 * g['gap_eq'].min():+.3f}%, {100 * g['gap_eq'].max():+.3f}%]")
